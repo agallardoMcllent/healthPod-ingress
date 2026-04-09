@@ -1,0 +1,54 @@
+name: Deploy Ingress Only to AKS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ingressBasic.yaml'
+      - '.github/workflows/deploy-ingress.yml'
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: rg-app-health-pod-backend-dev-mex
+  CLUSTER_NAME: aks-hp-backend-dev-mex
+  NAMESPACE: apps
+  INGRESS_FILE: ingressBasic.yaml
+  INGRESS_NAME: hello-root-ingress
+
+jobs:
+  deploy-ingress:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          cluster-name: ${{ env.CLUSTER_NAME }}
+
+      - name: Validate ingress manifest
+        run: kubectl apply --dry-run=client -f $INGRESS_FILE
+
+      - name: Deploy ingress only
+        run: kubectl apply -f $INGRESS_FILE
+
+      - name: Verify ingress
+        run: |
+          kubectl -n $NAMESPACE get ingress $INGRESS_NAME -o wide
+          kubectl -n $NAMESPACE describe ingress $INGRESS_NAME
